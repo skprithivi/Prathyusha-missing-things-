@@ -1606,3 +1606,105 @@ async function createPost(event){
     setTimeout(
 
         functi
+create extension if not exists pgcrypto;
+
+create table if not exists profiles (
+    id uuid primary key references auth.users(id) on delete cascade,
+    name text,
+    created_at timestamptz default now()
+);
+
+create table if not exists posts (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references auth.users(id) on delete cascade,
+    title text not null,
+    category text not null,
+    location text not null,
+    description text not null,
+    image_url text,
+    created_at timestamptz default now()
+);
+
+create table if not exists replies (
+    id uuid primary key default gen_random_uuid(),
+    post_id uuid not null references posts(id) on delete cascade,
+    user_id uuid not null references auth.users(id) on delete cascade,
+    message text not null,
+    created_at timestamptz default now()
+);
+
+
+alter table profiles enable row level security;
+alter table posts enable row level security;
+alter table replies enable row level security;
+
+
+create policy "Anyone can view posts"
+on posts
+for select
+using (true);
+
+
+create policy "Users can create own posts"
+on posts
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+
+create policy "Users can update own posts"
+on posts
+for update
+to authenticated
+using (auth.uid() = user_id);
+
+
+create policy "Users can delete own posts"
+on posts
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
+
+create policy "Users can create own profile"
+on profiles
+for insert
+to authenticated
+with check (auth.uid() = id);
+
+
+create policy "Users can view own profile"
+on profiles
+for select
+to authenticated
+using (auth.uid() = id);
+
+
+create policy "Private reply access"
+on replies
+for select
+to authenticated
+using (
+    auth.uid() = user_id
+    OR
+    EXISTS (
+        SELECT 1
+        FROM posts
+        WHERE posts.id = replies.post_id
+        AND posts.user_id = auth.uid()
+    )
+);
+
+
+create policy "Authenticated users can reply"
+on replies
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+
+create policy "Reply owner can delete"
+on replies
+for delete
+to authenticated
+using (auth.uid() = user_id);
